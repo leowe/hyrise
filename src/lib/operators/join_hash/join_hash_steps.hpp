@@ -856,12 +856,14 @@ inline void write_output_segments(Segments& output_segments, const std::shared_p
         auto iter = output_pos_list_cache.find(input_table_pos_lists);
         if (iter == output_pos_list_cache.end()) {
           // Get the row ids that are referenced
-          auto new_pos_list = std::make_shared<PosList>(pos_list->size());
+          auto new_pos_list = std::make_shared<PosList>();
+          new_pos_list->reserve(pos_list->size());
           std::mutex new_pos_list_mutex;
 
           // Define work as a lambda
           auto resolve_referenced_rows = [pos_list, input_table_pos_lists, new_pos_list, &new_pos_list_mutex](size_t pos_list_start, size_t pos_list_end) {
-            auto target_pos_list = PosList{};
+            auto target_pos_list = PosList();
+            target_pos_list.reserve(pos_list_end - pos_list_start);
 
             auto referenced_row = RowID{};
             for (auto row = pos_list_start; row <= pos_list_end; ++row) {
@@ -875,13 +877,12 @@ inline void write_output_segments(Segments& output_segments, const std::shared_p
               }
             }
             std::lock_guard<std::mutex> lock(new_pos_list_mutex);
-            std::move(std::begin(target_pos_list), std::end(target_pos_list), std::end(*new_pos_list));
+            std::move(target_pos_list.begin(), target_pos_list.end(), std::back_inserter(*new_pos_list));
           };
 
           // Calculate number of Jobs for processing
           const auto rows_per_job = Chunk::DEFAULT_SIZE;
           auto job_count = pos_list->size() / rows_per_job;
-          std::cout << "JobCount: " << job_count << " pos_list->size(): " << pos_list->size() << std::endl;
 
           if(job_count <= 1) {
             resolve_referenced_rows(0, pos_list->size() - 1);
@@ -890,11 +891,12 @@ inline void write_output_segments(Segments& output_segments, const std::shared_p
             auto job_begin_row_id = size_t{0};
             auto job_end_row_id = size_t{0};
             for (auto job_id = size_t{0}; job_id < job_count; ++job_id) {
-              // Calculate the range of rows to be processed by the next job
+              // Prepare next job: Calculate the range of rows to be processed
               job_end_row_id = job_begin_row_id + rows_per_job;
               if (job_end_row_id > pos_list->size() || (pos_list->size() - job_end_row_id) < (rows_per_job / 2)) {
                 job_end_row_id = pos_list->size() - 1;
               }
+              // Create and execute job
               jobs.push_back(std::make_shared<JobTask>([job_begin_row_id, job_end_row_id, resolve_referenced_rows]() {
                   resolve_referenced_rows(job_begin_row_id, job_end_row_id);
               }));
