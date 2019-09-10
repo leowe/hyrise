@@ -858,10 +858,6 @@ inline void write_output_segments(Segments& output_segments, const std::shared_p
           // Get the row ids that are referenced
           auto new_pos_list = std::make_shared<PosList>(pos_list->size());
 
-          // Calculate number of Jobs for processing
-          const auto rows_per_job = Chunk::DEFAULT_SIZE;
-          auto job_count = pos_list->size() / rows_per_job;
-
           // Define work as a lambda
           auto resolve_referenced_rows = [pos_list, new_pos_list, input_table_pos_lists](size_t pos_list_start, size_t pos_list_end) {
             auto referenced_row = RowID{};
@@ -876,6 +872,10 @@ inline void write_output_segments(Segments& output_segments, const std::shared_p
               }
             }
           };
+
+          // Calculate number of Jobs for processing
+          const auto rows_per_job = Chunk::DEFAULT_SIZE;
+          auto job_count = pos_list->size() / rows_per_job;
 
           if(job_count <= 1) {
             resolve_referenced_rows(0, pos_list->size() - 1);
@@ -892,6 +892,7 @@ inline void write_output_segments(Segments& output_segments, const std::shared_p
               jobs.push_back(std::make_shared<JobTask>([pos_list, new_pos_list, input_table_pos_lists, job_start_row_id, job_end_row_id, resolve_referenced_rows]() {
                   resolve_referenced_rows(job_start_row_id, job_end_row_id);
               }));
+              jobs.back()->schedule();
             }
             CurrentScheduler::wait_for_tasks(jobs);
           }
