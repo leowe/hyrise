@@ -881,7 +881,7 @@ inline void write_output_segments(Segments& output_segments, const std::shared_p
           };
 
           // Calculate number of Jobs for processing
-          const auto rows_per_job = Chunk::DEFAULT_SIZE;
+          const auto rows_per_job = Chunk::DEFAULT_SIZE / 2;
           auto job_count = pos_list->size() / rows_per_job;
 
           if(job_count <= 1) {
