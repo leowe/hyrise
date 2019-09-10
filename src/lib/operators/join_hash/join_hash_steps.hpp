@@ -901,6 +901,7 @@ inline void write_output_segments(Segments& output_segments, const std::shared_p
                   resolve_referenced_rows(job_begin_row_id, job_end_row_id);
               }));
               jobs.back()->schedule();
+              job_begin_row_id = job_end_row_id + 1;
             }
             CurrentScheduler::wait_for_tasks(jobs);
           }
