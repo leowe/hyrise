@@ -860,32 +860,22 @@ inline void write_output_segments(Segments& output_segments, const std::shared_p
           new_pos_list->reserve(pos_list->size());
           std::mutex new_pos_list_mutex;
 
-          // Define work as a lambda
-          auto resolve_referenced_rows = [pos_list, input_table_pos_lists, new_pos_list, &new_pos_list_mutex](size_t pos_list_start, size_t pos_list_end) {
-            auto target_pos_list = PosList();
-            target_pos_list.reserve(pos_list_end - pos_list_start);
-
-            auto referenced_row = RowID{};
-            for (auto row = pos_list_start; row <= pos_list_end; ++row) {
-              referenced_row = (*pos_list)[row];
-              if (referenced_row.chunk_offset == INVALID_CHUNK_OFFSET) {
-                target_pos_list.push_back(referenced_row);
-              }
-              else {
-                const auto& referenced_pos_list = *(*input_table_pos_lists)[referenced_row.chunk_id];
-                target_pos_list.push_back(referenced_pos_list[referenced_row.chunk_offset]);
-              }
-            }
-            std::lock_guard<std::mutex> lock(new_pos_list_mutex);
-            std::move(target_pos_list.begin(), target_pos_list.end(), std::back_inserter(*new_pos_list));
-          };
-
           // Calculate number of Jobs for processing
           const auto rows_per_job = Chunk::DEFAULT_SIZE / 2;
           auto job_count = pos_list->size() / rows_per_job;
 
           if(job_count <= 1) {
-            resolve_referenced_rows(0, pos_list->size() - 1);
+            auto referenced_row = RowID{};
+            for (auto row = size_t{0}; row < pos_list->size(); ++row) {
+              referenced_row = (*pos_list)[row];
+              if (referenced_row.chunk_offset == INVALID_CHUNK_OFFSET) {
+                new_pos_list->push_back(referenced_row);
+              }
+              else {
+                const auto& referenced_pos_list = *(*input_table_pos_lists)[referenced_row.chunk_id];
+                new_pos_list->push_back(referenced_pos_list[referenced_row.chunk_offset]);
+              }
+            }
           } else {
             std::vector<std::shared_ptr<JobTask>> jobs;
             auto job_begin_row_id = size_t{0};
@@ -897,14 +887,30 @@ inline void write_output_segments(Segments& output_segments, const std::shared_p
                 job_end_row_id = pos_list->size() - 1;
               }
               // Create and execute job
-              jobs.push_back(std::make_shared<JobTask>([job_begin_row_id, job_end_row_id, resolve_referenced_rows]() {
-                  resolve_referenced_rows(job_begin_row_id, job_end_row_id);
+              jobs.push_back(std::make_shared<JobTask>([pos_list, input_table_pos_lists, new_pos_list, &new_pos_list_mutex,job_begin_row_id, job_end_row_id]() {
+                auto target_pos_list = PosList();
+                target_pos_list.reserve(job_end_row_id - job_begin_row_id + 1);
+
+                auto referenced_row = RowID{};
+                for (auto row = job_begin_row_id; row <= job_end_row_id; ++row) {
+                  referenced_row = (*pos_list)[row];
+                  if (referenced_row.chunk_offset == INVALID_CHUNK_OFFSET) {
+                    target_pos_list.push_back(referenced_row);
+                  }
+                  else {
+                    const auto& referenced_pos_list = *(*input_table_pos_lists)[referenced_row.chunk_id];
+                    target_pos_list.push_back(referenced_pos_list[referenced_row.chunk_offset]);
+                  }
+                }
+                std::lock_guard<std::mutex> lock(new_pos_list_mutex);
+                std::move(target_pos_list.begin(), target_pos_list.end(), std::back_inserter(*new_pos_list));
               }));
               jobs.back()->schedule();
               job_begin_row_id = job_end_row_id + 1;
             }
             CurrentScheduler::wait_for_tasks(jobs);
           }
+          Assert(new_pos_list->size() == pos_list->size(), "Row count of input and and output PosLists do not match.");
           iter = output_pos_list_cache.emplace(input_table_pos_lists, new_pos_list).first;
         }
 
