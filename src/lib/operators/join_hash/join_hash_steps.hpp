@@ -883,7 +883,7 @@ inline void write_output_segments(Segments& output_segments, const std::shared_p
             for (auto job_id = size_t{0}; job_id < job_count; ++job_id) {
               // Prepare next job: Calculate the range of rows to be processed
               job_end_row_id = job_begin_row_id + rows_per_job;
-              if (job_end_row_id > pos_list->size() || (pos_list->size() - job_end_row_id) < (rows_per_job / 2)) {
+              if (job_end_row_id > pos_list->size() - 1 || job_id == job_count - 1) {
                 job_end_row_id = pos_list->size() - 1;
               }
               // Create and execute job
