@@ -857,17 +857,44 @@ inline void write_output_segments(Segments& output_segments, const std::shared_p
         if (iter == output_pos_list_cache.end()) {
           // Get the row ids that are referenced
           auto new_pos_list = std::make_shared<PosList>(pos_list->size());
-          auto new_pos_list_iter = new_pos_list->begin();
-          for (const auto& row : *pos_list) {
-            if (row.chunk_offset == INVALID_CHUNK_OFFSET) {
-              *new_pos_list_iter = row;
-            } else {
-              const auto& referenced_pos_list = *(*input_table_pos_lists)[row.chunk_id];
-              *new_pos_list_iter = referenced_pos_list[row.chunk_offset];
-            }
-            ++new_pos_list_iter;
-          }
 
+          // Calculate number of Jobs for processing
+          const auto rows_per_job = Chunk::DEFAULT_SIZE;
+          auto job_count = pos_list->size() / rows_per_job;
+
+          // Define work as a lambda
+          auto resolve_referenced_rows = [pos_list, new_pos_list, input_table_pos_lists](size_t pos_list_start, size_t pos_list_end) {
+            auto referenced_row = RowID{};
+            for (auto row = pos_list_start; row <= pos_list_end; ++row) {
+              referenced_row = (*pos_list)[row];
+              if (referenced_row.chunk_offset == INVALID_CHUNK_OFFSET) {
+                (*new_pos_list)[row] = referenced_row;
+              }
+              else {
+                const auto& referenced_pos_list = *(*input_table_pos_lists)[referenced_row.chunk_id];
+                (*new_pos_list)[row] = referenced_pos_list[referenced_row.chunk_offset];
+              }
+            }
+          };
+
+          if(job_count <= 1) {
+            resolve_referenced_rows(0, pos_list->size() - 1);
+          } else {
+            std::vector<std::shared_ptr<JobTask>> jobs;
+            auto job_start_row_id = size_t{0};
+            auto job_end_row_id = size_t{0};
+            for (auto job_id = size_t{0}; job_id < job_count; ++job_id) {
+              // Calculate the range of rows for the next job
+              job_end_row_id = job_start_row_id + rows_per_job;
+              if (job_end_row_id > pos_list->size()) {
+                job_end_row_id = pos_list->size() - 1;
+              }
+              jobs.push_back(std::make_shared<JobTask>([pos_list, new_pos_list, input_table_pos_lists, job_start_row_id, job_end_row_id, resolve_referenced_rows]() {
+                  resolve_referenced_rows(job_start_row_id, job_end_row_id);
+              }));
+            }
+            CurrentScheduler::wait_for_tasks(jobs);
+          }
           iter = output_pos_list_cache.emplace(input_table_pos_lists, new_pos_list).first;
         }
 
