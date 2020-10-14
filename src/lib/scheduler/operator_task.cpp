@@ -10,6 +10,7 @@
 #include "scheduler/job_task.hpp"
 #include "scheduler/worker.hpp"
 #include "utils/tracing/probes.hpp"
+#include "utils/timer.hpp"
 
 namespace opossum {
 OperatorTask::OperatorTask(std::shared_ptr<AbstractOperator> op, SchedulePriority priority, bool stealable)
@@ -55,6 +56,7 @@ std::shared_ptr<OperatorTask> OperatorTask::_add_tasks_from_operator(
 const std::shared_ptr<AbstractOperator>& OperatorTask::get_operator() const { return _op; }
 
 void OperatorTask::_on_execute() {
+  Timer performance_timer;
   auto context = _op->transaction_context();
   if (context) {
     switch (context->phase()) {
@@ -69,6 +71,7 @@ void OperatorTask::_on_execute() {
           // Essentially a noop, because no modifications are recorded yet. Better be on the safe side though.
           read_write_operator->rollback_records();
         }
+        std::cout << _op->name() << _op << " - (RolledBackAfterConflict)" << std::endl;
         return;
         break;
 
@@ -112,5 +115,9 @@ void OperatorTask::_on_execute() {
     // temporary table), it will not yet get deleted
     if (!previous_operator_still_needed) predecessor->get_operator()->clear_output();
   }
+
+  const auto walltime = performance_timer.lap();
+  std::cout << _op->name() << _op << "\n time: "
+            << format_duration(std::chrono::duration_cast<std::chrono::nanoseconds>(walltime)) << std::endl;
 }
 }  // namespace opossum
