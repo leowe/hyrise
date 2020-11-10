@@ -245,21 +245,22 @@ void AbstractTableGenerator::generate_and_store() {
   {
     std::cout << "- Adding tables to StorageManager and generating table statistics" << std::endl;
     auto& storage_manager = Hyrise::get().storage_manager;
-    auto threads = std::vector<std::thread>{};
+    // auto threads = std::vector<std::thread>{};
     for (auto& table_info_by_name_pair : table_info_by_name) {
       const auto& table_name = table_info_by_name_pair.first;
       auto& table_info = table_info_by_name_pair.second;
 
-      threads.emplace_back([&] {
+      {
         Timer per_table_timer;
         if (storage_manager.has_table(table_name)) storage_manager.drop_table(table_name);
         storage_manager.add_table(table_name, table_info.table);
         const auto output =
             std::string{"-  Added '"} + table_name + "' " + "(" + per_table_timer.lap_formatted() + ")\n";
         std::cout << output << std::flush;
-      });
+      }
+
     }
-    for (auto& thread : threads) thread.join();
+    // for (auto& thread : threads) thread.join();
 
     metrics.store_duration = timer.lap();
 

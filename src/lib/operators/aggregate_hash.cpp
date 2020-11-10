@@ -163,9 +163,9 @@ __attribute__((hot)) void AggregateHash::_aggregate_segment(ChunkID chunk_id, Co
         result.distinct_values().emplace(position.value());
       } else if constexpr (function == AggregateFunction::StandardDeviationSample) {  // NOLINT
         result.ensure_secondary_aggregates_initialized(context.buffer);
-        aggregator(position.value(), result.current_primary_aggregate, result.current_secondary_aggregates());
+        aggregator(ColumnDataType{position.value()}, result.current_primary_aggregate, result.current_secondary_aggregates());
       } else {
-        aggregator(position.value(), result.current_primary_aggregate);
+        aggregator(ColumnDataType{position.value()}, result.current_primary_aggregate);
       }
 
       if constexpr (function == AggregateFunction::Avg || function == AggregateFunction::Count ||
@@ -371,7 +371,7 @@ KeysPerChunk<AggregateKey> AggregateHash::_partition_by_groupby_keys() const {
                   if (id == std::numeric_limits<AggregateKeyEntry>::max()) {
                     // Could not take the shortcut above, either because we don't have a string or because it is too
                     // long
-                    auto inserted = id_map.try_emplace(position.value(), id_counter);
+                    auto inserted = id_map.try_emplace(ColumnDataType{position.value()}, id_counter);
 
                     id = inserted.first->second;
 

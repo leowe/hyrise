@@ -153,17 +153,24 @@ ColumnVsColumnTableScanImpl::_typed_scan_chunk_with_iterators(ChunkID chunk_id, 
   }
 
   auto conditionally_erase_comparator_type = [](auto comparator, const auto& it1, const auto& it2) {
-    if constexpr (erase_comparator_type == EraseTypes::OnlyInDebugBuild) {
+    // if constexpr (erase_comparator_type == EraseTypes::OnlyInDebugBuild) {
       return comparator;
-    } else {
-      return std::function<bool(const AbstractSegmentPosition<std::decay_t<decltype(it1->value())>>&,
-                                const AbstractSegmentPosition<std::decay_t<decltype(it2->value())>>&)>{comparator};
-    }
+    // } else {
+    //   return std::function<bool(const AbstractSegmentPosition<std::decay_t<decltype(it1->value())>>&,
+    //                             const AbstractSegmentPosition<std::decay_t<decltype(it2->value())>>&)>{comparator};
+    // }
   };
 
   with_comparator_light(maybe_flipped_condition, [&](auto predicate_comparator) {
     const auto comparator = [predicate_comparator](const auto& left, const auto& right) {
-      return predicate_comparator(left.value(), right.value());
+      using LeftType = typename std::decay_t<decltype(left.value())>;
+      using RightType = typename std::decay_t<decltype(right.value())>;
+
+      if constexpr (std::is_same_v<LeftType, pmr_string>) {
+        return predicate_comparator(pmr_string{left.value()}, pmr_string{right.value()});
+      }
+
+      return predicate_comparator(static_cast<LeftType>(left.value()), static_cast<RightType>(right.value()));
     };
 
     if (condition_was_flipped) {

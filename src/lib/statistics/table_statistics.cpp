@@ -66,6 +66,7 @@ std::shared_ptr<TableStatistics> TableStatistics::from_table(const Table& table)
         });
       }
     });
+    threads.back().join();
   }
 
   for (auto& thread : threads) {

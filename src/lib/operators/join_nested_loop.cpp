@@ -18,7 +18,7 @@ namespace {
 using namespace opossum;  // NOLINT
 
 void __attribute__((noinline))
-process_match(RowID left_row_id, RowID right_row_id, const JoinNestedLoop::JoinParams& params) {
+process_match [[maybe_unused]] (RowID left_row_id, RowID right_row_id, const JoinNestedLoop::JoinParams& params) {
   // Write out a pair of matching row_ids - except for Semi/Anti joins, who build their output from params.left_matches
   // after all pairs were compared
   if (params.write_pos_lists) {
@@ -43,30 +43,30 @@ void __attribute__((noinline))
 join_two_typed_segments(const BinaryFunctor& func, LeftIterator left_it, LeftIterator left_end,
                         RightIterator right_begin, RightIterator right_end, const ChunkID chunk_id_left,
                         const ChunkID chunk_id_right, const JoinNestedLoop::JoinParams& params) {
-  for (; left_it != left_end; ++left_it) {
-    const auto left_value = *left_it;
+  // for (; left_it != left_end; ++left_it) {
+  //   const auto left_value = *left_it;
 
-    const auto left_row_id = RowID{chunk_id_left, left_value.chunk_offset()};
+  //   const auto left_row_id = RowID{chunk_id_left, left_value.chunk_offset()};
 
-    for (auto right_it = right_begin; right_it != right_end; ++right_it) {
-      const auto right_value = *right_it;
-      const auto right_row_id = RowID{chunk_id_right, right_value.chunk_offset()};
+  //   for (auto right_it = right_begin; right_it != right_end; ++right_it) {
+  //     const auto right_value = *right_it;
+  //     const auto right_row_id = RowID{chunk_id_right, right_value.chunk_offset()};
 
-      // AntiNullAsTrue is the only join mode where NULLs in any operand lead to a match. For all other
-      // join modes, any NULL in the predicate results in a non-match.
-      if (params.mode == JoinMode::AntiNullAsTrue) {
-        if ((left_value.is_null() || right_value.is_null() || func(left_value.value(), right_value.value())) &&
-            params.secondary_predicate_evaluator.satisfies_all_predicates(left_row_id, right_row_id)) {
-          process_match(left_row_id, right_row_id, params);
-        }
-      } else {
-        if ((!left_value.is_null() && !right_value.is_null() && func(left_value.value(), right_value.value())) &&
-            params.secondary_predicate_evaluator.satisfies_all_predicates(left_row_id, right_row_id)) {
-          process_match(left_row_id, right_row_id, params);
-        }
-      }
-    }
-  }
+  //     // AntiNullAsTrue is the only join mode where NULLs in any operand lead to a match. For all other
+  //     // join modes, any NULL in the predicate results in a non-match.
+  //     if (params.mode == JoinMode::AntiNullAsTrue) {
+  //       if ((left_value.is_null() || right_value.is_null() || func(left_value.value(), right_value.value())) &&
+  //           params.secondary_predicate_evaluator.satisfies_all_predicates(left_row_id, right_row_id)) {
+  //         process_match(left_row_id, right_row_id, params);
+  //       }
+  //     } else {
+  //       if ((!left_value.is_null() && !right_value.is_null() && func(left_value.value(), right_value.value())) &&
+  //           params.secondary_predicate_evaluator.satisfies_all_predicates(left_row_id, right_row_id)) {
+  //         process_match(left_row_id, right_row_id, params);
+  //       }
+  //     }
+  //   }
+  // }
 }
 }  // namespace
 

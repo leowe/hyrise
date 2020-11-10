@@ -13,6 +13,10 @@
 #include "resolve_type.hpp"
 #include "storage/segment_iterate.hpp"
 
+
+
+#include "utils/assert.hpp"
+
 namespace {
 
 using namespace opossum;  // NOLINT
@@ -29,15 +33,52 @@ using ValueDistributionMap =
 template <typename T>
 void add_segment_to_value_distribution(const AbstractSegment& segment, ValueDistributionMap<T>& value_distribution,
                                        const HistogramDomain<T>& domain) {
-  segment_iterate<T>(segment, [&](const auto& iterator_value) {
+  segment_iterate<T>(segment, [&](const auto iterator_value) {
     if (iterator_value.is_null()) return;
 
     if constexpr (std::is_same_v<T, pmr_string>) {
-      // Do "contains()" check first to avoid the string copy incurred by string_to_domain() where possible
-      if (domain.contains(iterator_value.value())) {
-        ++value_distribution[iterator_value.value()];
+      std::stringstream ss;
+      using Test = typename std::decay_t<decltype(iterator_value.value())>;
+      if constexpr(std::is_same_v<Test, std::string_view>) {
+        ss << "$$$$$$$$$$ string_view: \n";
+      } else if constexpr(std::is_same_v<Test, pmr_string>) {
+        ss << "$$$$$$$$$$ string: \n";
       } else {
-        ++value_distribution[domain.string_to_domain(iterator_value.value())];
+        ss << "$$$$$$$$$$ FUCK: \n";
+      }
+
+      std::cout << "value: " << iterator_value.value() << " and  data: " << static_cast<const void*>(iterator_value.value().data()) << " and value: " << iterator_value.value() << std::endl;
+      const auto t1 = iterator_value.value();
+      std::cout << "data " << static_cast<const void*>(iterator_value.value().data()) << std::endl;
+      const auto t2 = std::string(iterator_value.value());
+      std::cout << "data " << static_cast<const void*>(iterator_value.value().data()) << std::endl;
+      // const auto t3 = std::basic_string<char, std::char_traits<char>, PolymorphicAllocator<char>>{iterator_value.value()};
+      const auto t3 = t2;
+      std::cout << "data " << static_cast<const void*>(iterator_value.value().data()) << std::endl;
+
+      std::cout << "data " << static_cast<const void*>(iterator_value.value().data()) << " >>> " << iterator_value.value() << "t1 " << t1 << " t2 " << t2 << " t3 " << t3 << std::endl;
+      std::cout << "data " << static_cast<const void*>(iterator_value.value().data()) << " >>> " << iterator_value.value() << "t1 " << t1 << " t2 " << t2 << " t3 " << t3 << std::endl;
+      std::cout << "data " << static_cast<const void*>(iterator_value.value().data()) << " >>> " << iterator_value.value() << "t1 " << t1 << " t2 " << t2 << " t3 " << t3 << std::endl;
+      std::cout << "data " << static_cast<const void*>(iterator_value.value().data()) << " >>> " << iterator_value.value() << "t1 " << t1 << " t2 " << t2 << " t3 " << t3 << std::endl << std::endl;
+      // if (t2 != std::string(iterator_value.value())) {
+      //   std::cout << "FUCK: " << t2 << " and " << std::string(iterator_value.value()) << std::endl;
+      // } else {
+      //   std::cout << "good?!? " << std::endl;
+      // }
+      Assert(t1 == iterator_value.value(), "t1");
+      Assert(t2 == std::string(iterator_value.value()), "t2");
+      Assert(t2.compare(t3), "t1");
+      Assert(t1 == t2, "t1t2");
+      Assert(t1 == t3, "t1t3");
+
+      ss << "adding stringview: " << t1 << " \t\t and string: " << t2 << "\t\t and pmr_string: " << t3 << "\n";
+      const auto str = ss.str();
+      std::cout << str << std::flush;
+      // Do "contains()" check first to avoid the string copy incurred by string_to_domain() where possible
+      if (domain.contains(pmr_string{iterator_value.value()})) {
+        ++value_distribution[pmr_string{iterator_value.value()}];
+      } else {
+        ++value_distribution[domain.string_to_domain(pmr_string{iterator_value.value()})];
       }
     } else {
       ++value_distribution[iterator_value.value()];

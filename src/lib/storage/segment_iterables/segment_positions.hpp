@@ -21,14 +21,14 @@ namespace opossum {
 template <typename T>
 class AbstractSegmentPosition {
  public:
-  using Type = T;
+  using Type = typename std::conditional_t<std::is_same_v<T, pmr_string>, std::string_view, T>;
 
  public:
   AbstractSegmentPosition() = default;
   AbstractSegmentPosition(const AbstractSegmentPosition&) = default;
   virtual ~AbstractSegmentPosition() = default;
 
-  virtual const T& value() const = 0;
+  virtual const Type& value() const = 0;
   virtual bool is_null() const = 0;
 
   /**
@@ -49,17 +49,18 @@ template <typename T>
 class SegmentPosition final : public AbstractSegmentPosition<T> {
  public:
   static constexpr bool Nullable = true;
+  using Type = typename std::conditional_t<std::is_same_v<T, pmr_string>, std::string_view, T>;
 
-  SegmentPosition(const T& value, const bool null_value, const ChunkOffset& chunk_offset)
+  SegmentPosition(const Type& value, const bool null_value, const ChunkOffset& chunk_offset)
       : _value{value}, _null_value{null_value}, _chunk_offset{chunk_offset} {}
 
-  const T& value() const override { return _value; }
+  const Type& value() const override { return _value; }
   bool is_null() const override { return _null_value; }
   ChunkOffset chunk_offset() const override { return _chunk_offset; }
 
  private:
   // The alignment improves the suitability of the iterator for (auto-)vectorization
-  alignas(8) const T _value;
+  alignas(8) const Type _value;
   alignas(8) const bool _null_value;
   alignas(8) const ChunkOffset _chunk_offset;
 };
@@ -73,17 +74,18 @@ template <typename T>
 class NonNullSegmentPosition final : public AbstractSegmentPosition<T> {
  public:
   static constexpr bool Nullable = false;
+  using Type = typename std::conditional_t<std::is_same_v<T, pmr_string>, std::string_view, T>;
 
-  NonNullSegmentPosition(const T& value, const ChunkOffset& chunk_offset)
+  NonNullSegmentPosition(const Type& value, const ChunkOffset& chunk_offset)
       : _value{value}, _chunk_offset{chunk_offset} {}
 
-  const T& value() const override { return _value; }
+  const Type& value() const override { return _value; }
   bool is_null() const override { return false; }
   ChunkOffset chunk_offset() const override { return _chunk_offset; }
 
  private:
   // The alignment improves the suitability of the iterator for (auto-)vectorization
-  alignas(8) const T _value;
+  alignas(8) const Type _value;
   alignas(8) const ChunkOffset _chunk_offset;
 };
 

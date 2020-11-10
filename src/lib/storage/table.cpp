@@ -298,9 +298,22 @@ std::vector<std::vector<AllTypeVariant>> Table::get_rows() const {
     if (!chunk) continue;
 
     for (auto column_id = ColumnID{0}; column_id < num_columns; ++column_id) {
-      segment_iterate(*chunk->get_segment(column_id), [&](const auto& segment_position) {
-        if (!segment_position.is_null()) {
-          rows[chunk_begin_row_idx + segment_position.chunk_offset()][column_id] = segment_position.value();
+      // segment_iterate(*chunk->get_segment(column_id), [&](const auto& segment_position) {
+      //   if (!segment_position.is_null()) {
+      //     rows[chunk_begin_row_idx + segment_position.chunk_offset()][column_id] = segment_position.value();
+      //   }
+      // });
+
+      segment_with_iterators(*chunk->get_segment(column_id), [&](auto it, const auto end) {
+        // using IteratorReturnType = typename decltype(it)::value_type;
+        // using SegmentDataType = typename IteratorReturnType::Type;
+        using SegmentDataType = typename decltype(it)::ValueType;
+        while (it != end) {
+          const auto segment_position = *it;
+          if (!segment_position.is_null()) {
+            rows[chunk_begin_row_idx + segment_position.chunk_offset()][column_id] = SegmentDataType{segment_position.value()};
+          }
+          ++it;
         }
       });
     }
@@ -379,12 +392,13 @@ void Table::set_value_clustered_by(const std::vector<ColumnID>& value_clustered_
             segment_iterate<ColumnDataType>(*segment, [&](const auto position) {
               Assert(!position.is_null(), "Value clustering is not defined for columns storing NULLs.");
 
-              const auto& [iter, inserted] = value_to_chunk_map.try_emplace(position.value(), chunk_id);
-              if (!inserted) {
-                Assert(iter->second == chunk_id,
-                       "Table cannot be set to value-clustered as same value "
-                       "is found in more than one chunk");
-              }
+              // TODO: get hand on type again ...
+              // const auto& [iter, inserted] = value_to_chunk_map.try_emplace(position.value(), chunk_id);
+              // if (!inserted) {
+              //   Assert(iter->second == chunk_id,
+              //          "Table cannot be set to value-clustered as same value "
+              //          "is found in more than one chunk");
+              // }
             });
           }
         });
