@@ -145,8 +145,8 @@ std::shared_ptr<const Table> JoinHash::_on_execute() {
   } else {
     build_input_table = _left_input->get_output();
     probe_input_table = _right_input->get_output();
-    build_column_id = _primary_predicate.column_ids.first;
-    probe_column_id = _primary_predicate.column_ids.second;
+    build_column_id = _primary_predicate.column_ids.second;
+    probe_column_id = _primary_predicate.column_ids.first;
   }
 
   // If the input operators are swapped, we also have to swap the column pairs and the predicate conditions
