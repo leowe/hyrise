@@ -1,0 +1,4 @@
+load imdb_data/movie_info_idx.bin movie_info_idx Dictionary
+load imdb_data/movie_info.bin movie_info Dictionary
+load imdb_data/cast_info.bin cast_info Dictionary
+load imdb_data/title.bin title Dictionary
