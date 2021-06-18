@@ -26,7 +26,8 @@ class EqualDistinctCountHistogram : public AbstractHistogram<T> {
   EqualDistinctCountHistogram(std::vector<T>&& bin_minima, std::vector<T>&& bin_maxima,
                               std::vector<HistogramCountType>&& bin_heights,
                               const HistogramCountType distinct_count_per_bin, const BinID bin_count_with_extra_value,
-                              const HistogramDomain<T>& domain = {});
+                              const HistogramDomain<T>& domain = {},
+                              std::vector<T>&& top_k_names = {}, std::vector<HistogramCountType>&& top_k_counts = {});
 
   /**
    * Create an EqualDistinctCountHistogram for a column (spanning all Segments) of a Table
@@ -53,6 +54,10 @@ class EqualDistinctCountHistogram : public AbstractHistogram<T> {
   const T& bin_maximum(const BinID index) const override;
   HistogramCountType bin_height(const BinID index) const override;
   HistogramCountType bin_distinct_count(const BinID index) const override;
+
+  std::shared_ptr<AbstractStatisticsObject> sliced(
+    const PredicateCondition predicate_condition, const AllTypeVariant& variant_value,
+    const std::optional<AllTypeVariant>& variant_value2) const override;
 
  protected:
   BinID _bin_for_value(const T& value) const override;
@@ -81,6 +86,13 @@ class EqualDistinctCountHistogram : public AbstractHistogram<T> {
   // Aggregated counts over all bins, to avoid redundant computation
   HistogramCountType _total_count;
   HistogramCountType _total_distinct_count;
+
+  // Vectors for top k estimation
+  std::vector<T> _top_k_names;
+  std::vector<HistogramCountType> _top_k_counts;
+
+  uint16_t _k = 5;
+
 };
 
 }  // namespace opossum
