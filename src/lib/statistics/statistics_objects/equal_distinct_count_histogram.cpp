@@ -13,16 +13,6 @@
 #include "resolve_type.hpp"
 #include "storage/segment_iterate.hpp"
 
-#include "expression/evaluation/like_matcher.hpp"
-#include "generic_histogram.hpp"
-#include "generic_histogram_builder.hpp"
-#include "lossy_cast.hpp"
-#include "resolve_type.hpp"
-#include "statistics/statistics_objects/abstract_statistics_object.hpp"
-#include "storage/create_iterable_from_segment.hpp"
-#include "storage/segment_iterate.hpp"
-#include "abstract_histogram.hpp"
-
 namespace {
 
 using namespace opossum;  // NOLINT
@@ -87,8 +77,7 @@ EqualDistinctCountHistogram<T>::EqualDistinctCountHistogram(std::vector<T>&& bin
                                                             std::vector<HistogramCountType>&& bin_heights,
                                                             const HistogramCountType distinct_count_per_bin,
                                                             const BinID bin_count_with_extra_value,
-                                                            const HistogramDomain<T>& domain,
-                                                            std::vector<T>&& top_k_names, std::vector<HistogramCountType>&& top_k_counts)
+                                                            const HistogramDomain<T>& domain)
     : AbstractHistogram<T>(domain),
       _bin_minima(std::move(bin_minima)),
       _bin_maxima(std::move(bin_maxima)),
@@ -105,9 +94,6 @@ EqualDistinctCountHistogram<T>::EqualDistinctCountHistogram(std::vector<T>&& bin
   _total_count = std::accumulate(_bin_heights.cbegin(), _bin_heights.cend(), HistogramCountType{0});
   _total_distinct_count = _distinct_count_per_bin * static_cast<HistogramCountType>(bin_count()) +
                           static_cast<HistogramCountType>(_bin_count_with_extra_value);
-
-  _top_k_names = top_k_names;
-  _top_k_counts = top_k_counts;
 }
 
 template <typename T>
@@ -116,24 +102,6 @@ std::shared_ptr<EqualDistinctCountHistogram<T>> EqualDistinctCountHistogram<T>::
   Assert(max_bin_count > 0, "max_bin_count must be greater than zero ");
 
   const auto value_distribution = value_distribution_from_column(table, column_id, domain);
-
-  const auto K = 5;
-
-  std::vector<T> top_k_names(K);
-  std::vector<HistogramCountType> top_k_counts(K);
-
-  auto sorted_count_values = value_distribution;
-  std::sort(sorted_count_values.begin(), sorted_count_values.end(),
-            [&](const auto& l, const auto& r) { return l.second > r.second; });
-
-  if (!sorted_count_values.empty()) {
-    for(auto i = 0u; i < K; i++) {
-      top_k_names[i] = sorted_count_values[i].first;
-      top_k_counts[i] = sorted_count_values[i].second;
-    }
-  } else {
-    std::cout << "Empty" << std::endl;
-  }
 
   if (value_distribution.empty()) {
     return nullptr;
@@ -179,60 +147,8 @@ std::shared_ptr<EqualDistinctCountHistogram<T>> EqualDistinctCountHistogram<T>::
 
   return std::make_shared<EqualDistinctCountHistogram<T>>(
       std::move(bin_minima), std::move(bin_maxima), std::move(bin_heights),
-      static_cast<HistogramCountType>(distinct_count_per_bin), bin_count_with_extra_value,
-      domain, std::move(top_k_names),std::move(top_k_counts));
+      static_cast<HistogramCountType>(distinct_count_per_bin), bin_count_with_extra_value);
 }
-
-template <typename T>
-std::shared_ptr<AbstractStatisticsObject> EqualDistinctCountHistogram<T>::sliced(
-    const PredicateCondition predicate_condition, const AllTypeVariant& variant_value,
-    const std::optional<AllTypeVariant>& variant_value2) const {
-  if (AbstractHistogram<T>::does_not_contain(predicate_condition, variant_value, variant_value2)) {
-    return nullptr;
-  }
-
-  const auto value = lossy_variant_cast<T>(variant_value);
-  DebugAssert(value, "sliced() cannot be called with NULL");
-
-  switch (predicate_condition) {
-    case PredicateCondition::Equals: {
-      GenericHistogramBuilder<T> builder{1, AbstractHistogram<T>::domain()};
-      bool is_top_k_value = false; 
-      for (auto i = 0u; i < _k; i++) {
-        if(_top_k_names[i] == value) {
-          is_top_k_value = true;
-          builder.add_bin(*value, *value,_top_k_counts[i], 1);
-          break;
-        }
-      }
-      if(!is_top_k_value) {
-        builder.add_bin(*value, *value,
-                        static_cast<HistogramCountType>(AbstractHistogram<T>::estimate_cardinality(PredicateCondition::Equals, variant_value)),
-                        1);
-      }
-      return builder.build();
-    }
-    case PredicateCondition::NotEquals:
-    case PredicateCondition::LessThanEquals:
-    case PredicateCondition::LessThan:
-    case PredicateCondition::GreaterThan:
-    case PredicateCondition::GreaterThanEquals:
-    case PredicateCondition::BetweenInclusive:
-    case PredicateCondition::BetweenLowerExclusive:
-    case PredicateCondition::BetweenUpperExclusive:
-    case PredicateCondition::BetweenExclusive:
-    case PredicateCondition::Like:
-    case PredicateCondition::NotLike:
-    case PredicateCondition::In:
-    case PredicateCondition::NotIn:
-    case PredicateCondition::IsNull:
-    case PredicateCondition::IsNotNull:
-      Fail("PredicateCondition not supported by Histograms");
-  }
-
-  Fail("Invalid enum value");
-}
-
 
 template <typename T>
 std::string EqualDistinctCountHistogram<T>::name() const {

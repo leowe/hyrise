@@ -401,6 +401,8 @@ set(
     statistics/statistics_objects/abstract_statistics_object.hpp
     statistics/statistics_objects/equal_distinct_count_histogram.cpp
     statistics/statistics_objects/equal_distinct_count_histogram.hpp
+    statistics/statistics_objects/top_k_equal_distinct_count_histogram.cpp
+    statistics/statistics_objects/top_k_equal_distinct_count_histogram.hpp
     statistics/statistics_objects/generic_histogram.cpp
     statistics/statistics_objects/generic_histogram.hpp
     statistics/statistics_objects/generic_histogram_builder.cpp
