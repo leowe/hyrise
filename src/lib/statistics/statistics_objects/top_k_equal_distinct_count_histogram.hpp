@@ -24,11 +24,15 @@ class TopKEqualDistinctCountHistogram : public AbstractHistogram<T> {
  public:
   using AbstractHistogram<T>::AbstractHistogram;
 
-  TopKEqualDistinctCountHistogram(std::vector<T>&& bin_minima, std::vector<T>&& bin_maxima,
-                              std::vector<HistogramCountType>&& bin_heights,
-                              const HistogramCountType distinct_count_per_bin, const BinID bin_count_with_extra_value,
-                              const HistogramDomain<T>& domain = {},
-                              std::vector<T>&& top_k_names = {}, std::vector<HistogramCountType>&& top_k_counts = {});
+  // TopKEqualDistinctCountHistogram(std::vector<T>&& bin_minima, std::vector<T>&& bin_maxima,
+  //                             std::vector<HistogramCountType>&& bin_heights,
+  //                             const HistogramCountType distinct_count_per_bin, const BinID bin_count_with_extra_value,
+  //                             const HistogramDomain<T>& domain = {},
+  //                             std::vector<T>&& top_k_names = {}, std::vector<HistogramCountType>&& top_k_counts = {});
+
+  TopKEqualDistinctCountHistogram(std::shared_ptr<EqualDistinctCountHistogram<T>> histogram, std::vector<T>&& top_k_names, 
+    std::vector<HistogramCountType>&& top_k_counts, const HistogramDomain<T>& domain = {});
+
 
   /**
    * Create an TopKEqualDistinctCountHistogram for a column (spanning all Segments) of a Table
@@ -65,31 +69,13 @@ class TopKEqualDistinctCountHistogram : public AbstractHistogram<T> {
   BinID _next_bin_for_value(const T& value) const override;
 
  private:
-  /**
-   * We use multiple vectors rather than a vector of structs for ease-of-use with STL library functions.
-   */
-
-  // Min values on a per-bin basis.
-  std::vector<T> _bin_minima;
-
-  // Max values on a per-bin basis.
-  std::vector<T> _bin_maxima;
-
-  // Number of values on a per-bin basis.
-  std::vector<HistogramCountType> _bin_heights;
-
-  // Number of distinct values per bin.
-  HistogramCountType _distinct_count_per_bin;
-
-  // The first bin_count_with_extra_value bins have an additional distinct value.
-  BinID _bin_count_with_extra_value;
 
   // Aggregated counts over all bins, to avoid redundant computation
   HistogramCountType _total_count;
   HistogramCountType _total_distinct_count;
 
   // Pointer to the EqualDistincCountHistogram
-  // std::shared_ptr<EqualDistinctCountHistogram<T>> _histogram;
+  std::shared_ptr<EqualDistinctCountHistogram<T>> _histogram;
 
   // Vectors for top k estimation
   std::vector<T> _top_k_names;

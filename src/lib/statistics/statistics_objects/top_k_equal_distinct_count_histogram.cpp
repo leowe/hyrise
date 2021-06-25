@@ -6,6 +6,8 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <iterator>
+#include <algorithm>
 
 #include <tsl/robin_map.h>  // NOLINT
 
@@ -25,49 +27,23 @@
 #include "equal_distinct_count_histogram.hpp"
 #include "equal_distinct_count_histogram.cpp"
 
+
 namespace opossum {
 
 template <typename T>
-TopKEqualDistinctCountHistogram<T>::TopKEqualDistinctCountHistogram(std::vector<T>&& bin_minima, std::vector<T>&& bin_maxima,
-                                                            std::vector<HistogramCountType>&& bin_heights,
-                                                            const HistogramCountType distinct_count_per_bin,
-                                                            const BinID bin_count_with_extra_value,
-                                                            const HistogramDomain<T>& domain,
-                                                            std::vector<T>&& top_k_names, std::vector<HistogramCountType>&& top_k_counts)
-    : AbstractHistogram<T>(domain),
-      _bin_minima(std::move(bin_minima)),
-      _bin_maxima(std::move(bin_maxima)),
-      _bin_heights(std::move(bin_heights)),
-      _distinct_count_per_bin(distinct_count_per_bin),
-      _bin_count_with_extra_value(bin_count_with_extra_value) {
-  Assert(_bin_minima.size() == _bin_maxima.size(), "Must have the same number of lower as upper bin edges.");
-  Assert(_bin_minima.size() == _bin_heights.size(), "Must have the same number of edges and heights.");
-  Assert(_distinct_count_per_bin > 0, "Cannot have bins with no distinct values.");
-  Assert(_bin_count_with_extra_value < _bin_minima.size(), "Cannot have more bins with extra value than bins.");
+TopKEqualDistinctCountHistogram<T>::TopKEqualDistinctCountHistogram(std::shared_ptr<EqualDistinctCountHistogram<T>> histogram, 
+  std::vector<T>&& top_k_names, std::vector<HistogramCountType>&& top_k_counts, const HistogramDomain<T>& domain)
+    : AbstractHistogram<T>(domain) {
 
-  AbstractHistogram<T>::_assert_bin_validity();
-
-  // std::vector<T> bin_minima_vector;
-  // std::copy(_bin_minima.begin(), _bin_minima.end(),
-  //             std::back_inserter(bin_minima_vector));
-
-  //  std::vector<T> bin_maxima_vector;
-  // std::copy(_bin_maxima.begin(), _bin_maxima.end(),
-  //             std::back_inserter(bin_maxima_vector));
-
-  //  std::vector<T> bin_heights_vector;
-  // std::copy(_bin_heights.begin(), _bin_heights.end(),
-  //             std::back_inserter(bin_heights_vector));
-
-  // _histogram = std::make_shared<EqualDistinctCountHistogram<T>>(std::move(bin_minima_vector), std::move(bin_maxima_vector), 
-  //   std::move(bin_heights_vector), _distinct_count_per_bin, _bin_count_with_extra_value, domain);
-
-  _total_count = std::accumulate(_bin_heights.cbegin(), _bin_heights.cend(), HistogramCountType{0});
-  _total_distinct_count = _distinct_count_per_bin * static_cast<HistogramCountType>(bin_count()) +
-                          static_cast<HistogramCountType>(_bin_count_with_extra_value);
-
+  _histogram = histogram;
   _top_k_names = top_k_names;
   _top_k_counts = top_k_counts;
+
+  const auto histogram_total_count = _histogram->total_count();
+  const auto top_k_total_count = std::accumulate(_top_k_counts.cbegin(), _top_k_counts.cend(), HistogramCountType{0});
+  _total_count = histogram_total_count + top_k_total_count;
+  _total_distinct_count = _histogram->total_distinct_count();
+
 }
 
 template <typename T>
@@ -75,13 +51,19 @@ std::shared_ptr<TopKEqualDistinctCountHistogram<T>> TopKEqualDistinctCountHistog
     const Table& table, const ColumnID column_id, const BinID max_bin_count, const HistogramDomain<T>& domain) {
   Assert(max_bin_count > 0, "max_bin_count must be greater than zero ");
 
-  const auto value_distribution = value_distribution_from_column(table, column_id, domain);
+  auto value_distribution = value_distribution_from_column(table, column_id, domain);
 
+  if (value_distribution.empty()) {
+    return nullptr;
+  }
+
+  // Get the first top k values and save them into vectors
   const auto K = 10;
 
   std::vector<T> top_k_names(K);
   std::vector<HistogramCountType> top_k_counts(K);
 
+  // Sort values by occurence count
   auto sorted_count_values = value_distribution;
   std::sort(sorted_count_values.begin(), sorted_count_values.end(),
             [&](const auto& l, const auto& r) { return l.second > r.second; });
@@ -90,13 +72,13 @@ std::shared_ptr<TopKEqualDistinctCountHistogram<T>> TopKEqualDistinctCountHistog
     for(auto i = 0u; i < K; i++) {
       top_k_names[i] = sorted_count_values[i].first;
       top_k_counts[i] = sorted_count_values[i].second;
+
     }
-  } else {
-    std::cout << "Empty" << std::endl;
   }
 
-  if (value_distribution.empty()) {
-    return nullptr;
+  // Remove Top K values from value distribution
+  for (auto i = 0u; i < K; i++) {
+    value_distribution.erase(std::remove(value_distribution.begin(), value_distribution.end(), std::make_pair(top_k_names[i], top_k_counts[i])), value_distribution.end());
   }
 
   // If there are fewer distinct values than the number of desired bins use that instead.
@@ -137,10 +119,10 @@ std::shared_ptr<TopKEqualDistinctCountHistogram<T>> TopKEqualDistinctCountHistog
     min_value_idx = max_value_idx + 1;
   }
 
-  return std::make_shared<TopKEqualDistinctCountHistogram<T>>(
-      std::move(bin_minima), std::move(bin_maxima), std::move(bin_heights),
-      static_cast<HistogramCountType>(distinct_count_per_bin), bin_count_with_extra_value,
-      domain, std::move(top_k_names),std::move(top_k_counts));
+  auto histogram = std::make_shared<EqualDistinctCountHistogram<T>>(std::move(bin_minima), std::move(bin_maxima), 
+    std::move(bin_heights), distinct_count_per_bin, bin_count_with_extra_value, domain);
+
+  return std::make_shared<TopKEqualDistinctCountHistogram<T>>(histogram, std::move(top_k_names),std::move(top_k_counts));
 }
 
 template <typename T>
@@ -150,7 +132,6 @@ std::shared_ptr<AbstractStatisticsObject> TopKEqualDistinctCountHistogram<T>::sl
   if (AbstractHistogram<T>::does_not_contain(predicate_condition, variant_value, variant_value2)) {
     return nullptr;
   }
-
   const auto value = lossy_variant_cast<T>(variant_value);
   DebugAssert(value, "sliced() cannot be called with NULL");
 
@@ -172,7 +153,47 @@ std::shared_ptr<AbstractStatisticsObject> TopKEqualDistinctCountHistogram<T>::sl
       }
       return builder.build();
     }
-    case PredicateCondition::NotEquals:
+    case PredicateCondition::NotEquals: {
+      const auto value_bin_id = _bin_for_value(*value);
+      if (value_bin_id == INVALID_BIN_ID) return clone();
+
+      auto minimum = bin_minimum(value_bin_id);
+      auto maximum = bin_maximum(value_bin_id);
+      const auto distinct_count = bin_distinct_count(value_bin_id);
+
+      // Do not create empty bin if `value` is the only value in the bin
+      const auto new_bin_count = minimum == maximum ? bin_count() - 1 : bin_count();
+
+      GenericHistogramBuilder<T> builder{new_bin_count, _domain};
+
+      builder.add_copied_bins(*this, BinID{0}, value_bin_id);
+
+      // Do not create empty bin if `value` is the only value in the bin
+      if (minimum != maximum) {
+        // A bin [50, 60] sliced with `!= 60` becomes [50, 59]
+        // TODO(anybody) Implement bin bounds trimming for strings
+        // NOLINTNEXTLINE clang-tidy is crazy and sees a "potentially unintended semicolon" here...
+        if constexpr (!std::is_same_v<pmr_string, T>) {
+          if (minimum == *value) {
+            minimum = _domain.next_value_clamped(*value);
+          }
+
+          if (maximum == *value) {
+            maximum = _domain.previous_value_clamped(*value);
+          }
+        }
+
+        const auto estimate = estimate_cardinality_and_distinct_count(PredicateCondition::Equals, variant_value);
+        const auto new_height = bin_height(value_bin_id) - estimate.first;
+        const auto new_distinct_count = distinct_count - estimate.second;
+
+        builder.add_bin(minimum, maximum, new_height, new_distinct_count);
+      }
+
+      builder.add_copied_bins(*this, value_bin_id + 1, bin_count());
+
+      return builder.build();
+    }
     case PredicateCondition::LessThanEquals:
     case PredicateCondition::LessThan:
     case PredicateCondition::GreaterThan:
@@ -202,65 +223,58 @@ std::string TopKEqualDistinctCountHistogram<T>::name() const {
 template <typename T>
 std::shared_ptr<AbstractHistogram<T>> TopKEqualDistinctCountHistogram<T>::clone() const {
   // The new histogram needs a copy of the data
-  auto bin_minima_copy = _bin_minima;
-  auto bin_maxima_copy = _bin_maxima;
-  auto bin_heights_copy = _bin_heights;
-
-  return std::make_shared<TopKEqualDistinctCountHistogram<T>>(std::move(bin_minima_copy), std::move(bin_maxima_copy),
-                                                          std::move(bin_heights_copy), _distinct_count_per_bin,
-                                                          _bin_count_with_extra_value);
+  auto histogram_copy = _histogram->clone_as_equal_distinct_count_histogram();
+  auto top_k_names_copy = _top_k_names;
+  auto top_k_counts_copy = _top_k_counts;
+  //return histogram_copy;
+  return std::make_shared<TopKEqualDistinctCountHistogram<T>>(histogram_copy, std::move(top_k_names_copy), std::move(top_k_counts_copy));
 }
 
 template <typename T>
 BinID TopKEqualDistinctCountHistogram<T>::bin_count() const {
-  return _bin_heights.size();
+  return _histogram->bin_count();
 }
 
 template <typename T>
 BinID TopKEqualDistinctCountHistogram<T>::_bin_for_value(const T& value) const {
-  const auto it = std::lower_bound(_bin_maxima.cbegin(), _bin_maxima.cend(), value);
-  const auto index = static_cast<BinID>(std::distance(_bin_maxima.cbegin(), it));
-
-  if (it == _bin_maxima.cend() || value < bin_minimum(index) || value > bin_maximum(index)) {
-    return INVALID_BIN_ID;
+  //TODO: look at where is that used
+  for (auto i = 0u; i < _top_k_names.size(); i++) {
+    if(_top_k_names[i] == value) {
+      return 1;
+    }
   }
-
-  return index;
+  return _histogram->bin_for_value(value);
 }
 
 template <typename T>
 BinID TopKEqualDistinctCountHistogram<T>::_next_bin_for_value(const T& value) const {
-  const auto it = std::upper_bound(_bin_maxima.cbegin(), _bin_maxima.cend(), value);
-
-  if (it == _bin_maxima.cend()) {
-    return INVALID_BIN_ID;
+  //TODO: look at where is that used
+  for (auto i = 0u; i < _top_k_names.size(); i++) {
+    if(_top_k_names[i] == value) {
+      return 1;
+    }
   }
-
-  return static_cast<BinID>(std::distance(_bin_maxima.cbegin(), it));
+  return _histogram->next_bin_for_value(value);
 }
 
 template <typename T>
 const T& TopKEqualDistinctCountHistogram<T>::bin_minimum(const BinID index) const {
-  DebugAssert(index < _bin_minima.size(), "Index is not a valid bin.");
-  return _bin_minima[index];
+  return _histogram->bin_minimum(index);
 }
 
 template <typename T>
 const T& TopKEqualDistinctCountHistogram<T>::bin_maximum(const BinID index) const {
-  DebugAssert(index < _bin_maxima.size(), "Index is not a valid bin.");
-  return _bin_maxima[index];
+  return _histogram->bin_maximum(index);
 }
 
 template <typename T>
 HistogramCountType TopKEqualDistinctCountHistogram<T>::bin_height(const BinID index) const {
-  DebugAssert(index < _bin_heights.size(), "Index is not a valid bin.");
-  return _bin_heights[index];
+  return _histogram->bin_height(index);
 }
 
 template <typename T>
 HistogramCountType TopKEqualDistinctCountHistogram<T>::bin_distinct_count(const BinID index) const {
-  DebugAssert(index < bin_count(), "Index is not a valid bin.");
-  return HistogramCountType{_distinct_count_per_bin + (index < _bin_count_with_extra_value ? 1 : 0)};
+  return _histogram->bin_distinct_count(index);
 }
 
 template <typename T>

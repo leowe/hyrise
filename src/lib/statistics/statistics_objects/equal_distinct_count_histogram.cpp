@@ -168,8 +168,30 @@ std::shared_ptr<AbstractHistogram<T>> EqualDistinctCountHistogram<T>::clone() co
 }
 
 template <typename T>
+std::shared_ptr<EqualDistinctCountHistogram<T>> EqualDistinctCountHistogram<T>::clone_as_equal_distinct_count_histogram() const {
+  // The new histogram needs a copy of the data
+  auto bin_minima_copy = _bin_minima;
+  auto bin_maxima_copy = _bin_maxima;
+  auto bin_heights_copy = _bin_heights;
+
+  return std::make_shared<EqualDistinctCountHistogram<T>>(std::move(bin_minima_copy), std::move(bin_maxima_copy),
+                                                          std::move(bin_heights_copy), _distinct_count_per_bin,
+                                                          _bin_count_with_extra_value);
+}
+
+template <typename T>
 BinID EqualDistinctCountHistogram<T>::bin_count() const {
   return _bin_heights.size();
+}
+
+template <typename T>
+BinID EqualDistinctCountHistogram<T>::bin_for_value(const T& value) const {
+  return _bin_for_value(value);
+}
+
+template <typename T>
+BinID EqualDistinctCountHistogram<T>::next_bin_for_value(const T& value) const {
+  return _next_bin_for_value(value);
 }
 
 template <typename T>

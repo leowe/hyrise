@@ -38,6 +38,7 @@ class EqualDistinctCountHistogram : public AbstractHistogram<T> {
 
   std::string name() const override;
   std::shared_ptr<AbstractHistogram<T>> clone() const override;
+  std::shared_ptr<EqualDistinctCountHistogram<T>> clone_as_equal_distinct_count_histogram() const;
   HistogramCountType total_distinct_count() const override;
   HistogramCountType total_count() const override;
 
@@ -53,6 +54,9 @@ class EqualDistinctCountHistogram : public AbstractHistogram<T> {
   const T& bin_maximum(const BinID index) const override;
   HistogramCountType bin_height(const BinID index) const override;
   HistogramCountType bin_distinct_count(const BinID index) const override;
+
+  BinID bin_for_value(const T& value) const;
+  BinID next_bin_for_value(const T& value) const;
 
  protected:
   BinID _bin_for_value(const T& value) const override;

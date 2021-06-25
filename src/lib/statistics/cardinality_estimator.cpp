@@ -734,7 +734,6 @@ std::shared_ptr<TableStatistics> CardinalityEstimator::estimate_operator_scan_pr
 
           value2_variant = boost::get<AllTypeVariant>(*predicate.value2);
         }
-
         const auto sliced_statistics_object =
             scan_statistics_object->sliced(predicate.predicate_condition, value_variant, value2_variant);
         if (!sliced_statistics_object) {
@@ -749,6 +748,10 @@ std::shared_ptr<TableStatistics> CardinalityEstimator::estimate_operator_scan_pr
         if (input_table_statistics->row_count == 0 || sliced_histogram->total_count() == 0.0f) {
           selectivity = 0.0f;
         } else {
+          
+          std::cout << sliced_histogram->total_count() << std::endl;
+          std::cout << scan_statistics_object->total_count() << std::endl;
+          
           selectivity = sliced_histogram->total_count() / scan_statistics_object->total_count();
         }
 
