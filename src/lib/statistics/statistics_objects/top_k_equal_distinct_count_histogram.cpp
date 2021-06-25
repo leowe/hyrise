@@ -154,45 +154,69 @@ std::shared_ptr<AbstractStatisticsObject> TopKEqualDistinctCountHistogram<T>::sl
       return builder.build();
     }
     case PredicateCondition::NotEquals: {
-      const auto value_bin_id = _bin_for_value(*value);
-      if (value_bin_id == INVALID_BIN_ID) return clone();
-
-      auto minimum = bin_minimum(value_bin_id);
-      auto maximum = bin_maximum(value_bin_id);
-      const auto distinct_count = bin_distinct_count(value_bin_id);
-
-      // Do not create empty bin if `value` is the only value in the bin
-      const auto new_bin_count = minimum == maximum ? bin_count() - 1 : bin_count();
-
-      GenericHistogramBuilder<T> builder{new_bin_count, _domain};
-
-      builder.add_copied_bins(*this, BinID{0}, value_bin_id);
-
-      // Do not create empty bin if `value` is the only value in the bin
-      if (minimum != maximum) {
-        // A bin [50, 60] sliced with `!= 60` becomes [50, 59]
-        // TODO(anybody) Implement bin bounds trimming for strings
-        // NOLINTNEXTLINE clang-tidy is crazy and sees a "potentially unintended semicolon" here...
-        if constexpr (!std::is_same_v<pmr_string, T>) {
-          if (minimum == *value) {
-            minimum = _domain.next_value_clamped(*value);
-          }
-
-          if (maximum == *value) {
-            maximum = _domain.previous_value_clamped(*value);
-          }
+      // Check if value in top-k values
+      auto top_k_index = _top_k_names.size();
+      
+      for (auto i = 0u; i < _top_k_names.size(); i++) {
+        if(_top_k_names[i] == value) {
+          top_k_index = i;
+          break;
         }
-
-        const auto estimate = estimate_cardinality_and_distinct_count(PredicateCondition::Equals, variant_value);
-        const auto new_height = bin_height(value_bin_id) - estimate.first;
-        const auto new_distinct_count = distinct_count - estimate.second;
-
-        builder.add_bin(minimum, maximum, new_height, new_distinct_count);
       }
 
-      builder.add_copied_bins(*this, value_bin_id + 1, bin_count());
+      if (top_k_index != _top_k_names.size()) {
+        const auto new_bin_count = bin_count() + _top_k_names.size() - 1;
+        GenericHistogramBuilder<T> builder{new_bin_count, AbstractHistogram<T>::domain()};
+        for (auto i = 0u, top_k_value_count = _top_k_names.size(); i < top_k_value_count; i++) {
+          if (i == top_k_index) continue;
+          builder.add_bin(_top_k_names[i], _top_k_names[i], _top_k_counts[i], 1);
+        }
+        builder.add_copied_bins(*this, BinID{0}, bin_count());
+        return builder.build();
+      } else {
+        // Histogram or nothing
 
-      return builder.build();
+        const auto value_bin_id = _bin_for_value(*value);
+        if (value_bin_id == INVALID_BIN_ID) return clone();
+
+        auto minimum = bin_minimum(value_bin_id);
+        auto maximum = bin_maximum(value_bin_id);
+        const auto distinct_count = bin_distinct_count(value_bin_id);
+
+        // Do not create empty bin if `value` is the only value in the bin
+        auto new_bin_count = minimum == maximum ? bin_count() - 1 : bin_count();
+        new_bin_count += _top_k_names.size();
+
+        GenericHistogramBuilder<T> builder{new_bin_count, AbstractHistogram<T>::domain()};
+        builder.add_copied_bins(*this, BinID{0}, value_bin_id);
+
+        // Do not create empty bin if `value` is the only value in the bin
+        if (minimum != maximum) {
+          // A bin [50, 60] sliced with `!= 60` becomes [50, 59]
+          // TODO(anybody) Implement bin bounds trimming for strings
+          // NOLINTNEXTLINE clang-tidy is crazy and sees a "potentially unintended semicolon" here...
+          if constexpr (!std::is_same_v<pmr_string, T>) {
+            if (minimum == *value) {
+              minimum = AbstractHistogram<T>::domain().next_value_clamped(*value);
+            }
+
+            if (maximum == *value) {
+              maximum = AbstractHistogram<T>::domain().previous_value_clamped(*value);
+            }
+          }
+
+          const auto estimate = AbstractHistogram<T>::estimate_cardinality_and_distinct_count(PredicateCondition::Equals, variant_value);
+          const auto new_height = bin_height(value_bin_id) - estimate.first;
+          const auto new_distinct_count = distinct_count - estimate.second;
+
+          builder.add_bin(minimum, maximum, new_height, new_distinct_count);
+        }
+        builder.add_copied_bins(*this, value_bin_id + 1, bin_count());
+        for (auto i = 0u, top_k_value_count = _top_k_names.size(); i < top_k_value_count; i++) {
+          builder.add_bin(_top_k_names[i], _top_k_names[i], _top_k_counts[i], 1);
+        }
+        return builder.build();
+      }
     }
     case PredicateCondition::LessThanEquals:
     case PredicateCondition::LessThan:
