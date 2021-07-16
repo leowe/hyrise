@@ -413,6 +413,8 @@ set(
     statistics/statistics_objects/null_value_ratio_statistics.hpp
     statistics/statistics_objects/range_filter.cpp
     statistics/statistics_objects/range_filter.hpp
+    statistics/statistics_objects/top_k_equal_distinct_count_histogram.cpp
+    statistics/statistics_objects/top_k_equal_distinct_count_histogram.hpp
     statistics/statistics_objects/top_k_uniform_distribution_histogram.cpp
     statistics/statistics_objects/top_k_uniform_distribution_histogram.hpp
     statistics/table_statistics.cpp
