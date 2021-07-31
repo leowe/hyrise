@@ -27,6 +27,8 @@
 #include "equal_distinct_count_histogram.hpp"
 #include "equal_distinct_count_histogram.cpp"
 
+#include "../benchmark/join_order_benchmark.cpp"
+
 
 namespace opossum {
 
@@ -41,7 +43,7 @@ std::shared_ptr<GenericHistogram<T>> TopKUniformDistributionHistogram<T>::from_c
   }
 
   // If the column holds less than K distinct values use the distinct count as TOP_K instead
-  const auto k = std::min(TOP_K_DEFAULT, value_distribution.size());
+  const auto k = std::min(TOP_K_CLI, value_distribution.size());
 
   // Get the first top k values and save them into vectors
   std::vector<T> top_k_names(k);

@@ -21,6 +21,8 @@
 using namespace opossum;               // NOLINT
 using namespace std::string_literals;  // NOLINT
 
+auto TOP_K_CLI = 100ul;
+
 /**
  * Each of the 21 JOB tables has one surrogate key. This function registers key constraints for all of them.
  */
@@ -133,6 +135,7 @@ int main(int argc, char* argv[]) {
   query_path = cli_parse_result["query_path"].as<std::string>();
   table_path = cli_parse_result["table_path"].as<std::string>();
   queries_str = cli_parse_result["queries"].as<std::string>();
+  TOP_K_CLI = cli_parse_result["top_k"].as<std::uint32_t>();
 
   benchmark_config = std::make_shared<BenchmarkConfig>(CLIConfigParser::parse_cli_options(cli_parse_result));
 
